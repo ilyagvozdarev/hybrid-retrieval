@@ -1,0 +1,9 @@
+optim:
+    gradient_checkpointing: true
+    optim: adamw_torch_fused
+training:
+    num_train_epochs: 2
+    train_batch_size: 16
+    learning_rate: 2.0e-5
+    warmup_steps: 0.1
+seed: 42

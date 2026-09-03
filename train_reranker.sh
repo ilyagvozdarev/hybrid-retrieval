@@ -1,0 +1,12 @@
+python train_reranker.py \
+--model "BAAI/bge-reranker-v2-m3" \
+--train_config "configs/train/train_config.yaml" \
+--data_dir "../data/dataset" \
+--inv_qrels "inv_qrels.json" \
+--passages_splits "passages_splits2.json" \
+--passages "passages.json" \
+--queries "queries.json" \
+--train_dataset "hard_negatives/ds_h2.json" \
+--out_dir "result" \
+--ranking "result/eval/dense/Information-Retrieval_evaluation_ir_evaluator_predictions_cosine.jsonl" \
+--ranking_top_k 20

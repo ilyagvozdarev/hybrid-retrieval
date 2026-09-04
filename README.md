@@ -1,140 +1,210 @@
-# Time series clustering
+## Hybrid retrieval
+
+Training and evaluation of a two-stage retrieval pipeline: retriever top-n candidates → cross-encoder reranker reordering.
+
+**approaches**:
+
+| Stage | Variants |
+| --- | --- |
+| Retriever | dense <br> dense + BM25 <br> **dense + sparse (splade)** ← best |
+| Reranker | cross-encoder |
+
+<br>
+
+**final setup**<br>
+Retriever (dense) top-20  →  Reranker (cross-encoder)
 
 
+**retriever**
 
+| | |
+| --- | --- |
+| model | `deepvk/USER-bge-m3` |
+| loss | `CachedMultipleNegativesRankingLoss` |
+| batch sampler | `NO_DUPLICATES` |
+| hard negatives | 2 per query: top-1 + 1 random from the ranking range<br>`range_min=5`, `range_max=35`, `num_negatives=30` |
 
-## Preparing
-Clone repo 
-```bash
-git clone https://github.com/ilyagvozdarev/timeseries-clustering.git
-cd timeseries-clustering
+**reranker**
+
+| | |
+| --- | --- |
+| model | `BAAI/bge-reranker-v2-m3` |
+| loss | `CachedMultipleNegativesRankingLoss` |
+
+**evaluation (retriever → reranker)**:
+
+| k | accuracy | precision | recall | ndcg |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.8973 | 0.8973 | 0.8973 | 0.8973 |
+| 3 | 0.9821 | 0.3274 | 0.9821 | 0.9485 | 
+| 5 | 0.9955 | 0.1991 | 0.9955 | 0.9541 | 
+| 10 | 1.0000 | 0.1000 | 1.0000 | 0.9557 | 
+
+`map@20 = 0.9406`, `mrr@10 = 0.9406`
+
+<br>
+
+**sparse (splade)**
+
+| | |
+| --- | --- |
+| model | `opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1` |
+| loss | `CachedSpladeLoss` over `SparseMultipleNegativesRankingLoss` |
+| regularizer weight | `3e-3` for queries and documents |
+| batch sampler | `NO_DUPLICATES` |
+
+**evaluation**:
+
+| k | accuracy | precision | recall | ndcg |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.7813 | 0.7813 | 0.7813 | — |
+| 3 | 0.9241 | 0.3080 | 0.9241 | — |
+| 5 | 0.9554 | 0.1911 | 0.9554 | — |
+| 10 | 0.9866 | 0.0987 | 0.9866 | 0.8856 |
+
+`map@20 = 0.8531`, `map@100 = 0.8534`, `mrr@10 = 0.8528`
+
+**sparsity**:
+
+| | active dims | sparsity ratio |
+| --- | ---: | ---: |
+| query | 215.5 | 0.9980 |
+| corpus | 361.7 | 0.9966 |
+
+`avg_flops = 53.09`
+
+**RRF (dense + splade)**:
+
+| | map | mrr@10 | ndcg@10 |
+| --- | ---: | ---: | ---: |
+| dense | 0.8688 | 0.8685 | 0.8997 |
+| sparse (splade) | 0.8534 | 0.8528 | 0.8856 |
+| **fusion** | **0.8881** | **0.8881** | **0.9160** |
+
+Learned term weights for a query:
+
+```python
+output = model_sparse_splade.encode(['нормы закрепления при штормовом ветре'])
+model_sparse_splade.decode(output, top_k=10)
 ```
-  
-Create venv  
+
+| token | weight |
+| --- | ---: |
+| `##ет` | 2.0054 |
+| `##ете` | 1.9371 |
+| `##ре` | 1.7489 |
+| `##рм` | 1.2864 |
+| `за` | 1.2845 |
+| `но` | 1.2567 |
+| `што` | 1.2246 |
+| `##к` | 1.2002 |
+| `##пления` | 1.1821 |
+| `##пление` | 1.0149 |
+
+
+## Installation
+
+Clone the repo:
+
+```bash
+git clone https://github.com/ilyagvozdarev/hybrid-retrieval.git
+cd hybrid-retrieval
+```
+
+Create and activate a virtual environment:
+
 ```bash
 python -m venv venv
-source venv/bin/activate
+source venv\Scripts\Activate.ps1    # Windows
+source venv/bin/activate            # Linux / macOS
 ```
-  
-Install requirements
+
+Install the requirements:
+
 ```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+
 ## Run
 
+### 1. Mine hard negatives
+
+Produces the training dataset in n-tuple format (`anchor`, `positive`, `negative_1`, …).
+Mining parameters live in `configs/mine_config.yaml`.
+
 ```bash
-python ts_clustering.py \
---tss_path "data/tss.h5" \
---method n2d \
---method_config "model_configs/n2d_config.yml" \
---min_clusters 10 \
---max_clusters 15 \
---periods DAY WEEK \
---freqs 60 650 \
---optim_freq \
---threshold 0.001
+python mine_hard_negatives.py \
+--model "deepvk/USER-bge-m3" \
+--mine_config "configs/mine_config.yaml" \
+--qrels "data/dataset/qrels.json"
 ```
 
-output structure:
+`--qrels` expects a flat `{query_id: passage_id}` mapping. That file is not in the repo — only `inv_qrels.json`,
+the inverted form used for evaluation. Skip this step and use the checked-in `hard_negatives/ds_h2.json`
+to reproduce the runs below.
+
+### 2. Train
+
+train dense retriever:
+```bash
+python train_retriever_dense.py \
+--model "deepvk/USER-bge-m3" \
+--train_config "configs/train/train_config.yaml" \
+--data_dir "./data/dataset" \
+--inv_qrels "inv_qrels.json" \
+--passages_splits "passages_splits2.json" \
+--passages "passages.json" \
+--queries "queries.json" \
+--train_dataset "hard_negatives/ds_h2.json" \
+--out_dir "result"
 ```
-|- metrics
-   |- best_metrics__n2d__DAY__60s__10_12_clusters.txt
-   |- best_metrics__n2d__WEEK__60s__10_12_clusters.txt
-   |- clusters_count_metrics__n2d.csv
-   |- metrics__n2d.csv
-   |- metrics__n2d__DAY__60s__10_12_clusters.csv
-   |- metrics__n2d__WEEK__60s__10_12_clusters.csv
-|- plots
-   |- clusters
-      |- clusters__n2d__DAY__60s__10_clusters.jpg
-      |- clusters__n2d__DAY__60s__11_clusters.jpg
-      |- clusters__n2d__DAY__60s__12_clusters.jpg
-      |- clusters__n2d__WEEK__60s__10_clusters.jpg
-      ...
-   |- clusters_scatter
-      |- cluster__n2d__DAY__60s__10_clusters.html
-      |- cluster__n2d__DAY__60s__11_clusters.html
-      |- cluster__n2d__DAY__60s__12_clusters.html
-      ...
-   |- metrics__n2d.png
-   |- silhouettes__n2d__DAY__60s.png
-   |- silhouettes__n2d__WEEK__60s.png
+
+train sparse (splade) retriever and reranker (see the docstring for CLI args):
+```bash
+python train_retriever_splade.py
+python train_reranker.py
 ```
 
 ## Data
 
-Series naming format - monitoringMetric$*identifier*_*period*<br><br>
-Possible values for the period over which values are stored in the time series: DAY, WEEK, MONTH, HALF_YEAR, INFINITE.
+Rules for the technical operation of railways<br>
+**source**: https://www.tdesant.ru/info/item/316
 
-Example:<br>
-series "monitoringMetric$20221722__WEEK":
-
-<p align="center">
-<img src="./resources/ts_example.jpg" />
-</p>
-
-## Preprocessing of series
-
-- removal of empty series
-- for each period, keep the series (across all periods) that overlap with the interval [median start time across all series of the period + 10 min, median end time across all series of the period - 10 min]
-- resampling at the optimal frequency:<br>
-the optimal frequency for a period is the most common optimal frequency among the series falling into that period
-- interpolation of NaN values produced after resampling
-- truncation to the interval boundaries (see item 2)
-- removal of empty series that may have reappeared after truncation
-- removal of constant series
-- min-max scaling
-
-<br>
-Algorithm for computing the optimal frequency:
-
-1. Resample the input series at a frequency equal to the median frequency
-2. Build a grid of frequencies from the median frequency to the maximum possible frequency (1 day), with a specified number of elements in the grid
-3. Use binary search over the grid to find the largest downsampling frequency — the frequency at which the resampled series (downsampling + upsampling back to the original median frequency) has the largest error that is still below a specified threshold
-<br>Error - MSE(original series, resampled series) / MSE(original series, baseline series), baseline downsampling frequency = 86400 sec (1 day)
-
-The purpose is maximum data compression (without quality loss below the specified threshold) to speed up further clustering.
-<br><br>
+synthetic generation:
+- hierarchical chunking by document structure (total corpus - 918 passages)
+- sampling ~1-3 passages from several sections (total ~100 passages)
+- generating 5-10 queries for each passage (prompt: `data/prompts`, models: `nvidia/MiniMax-M3-NVFP4`, `Claude Sonnet 5`) with manual review
+- split by passages, stratified by sections
 
 
-## Clustering Evaluation and Visualization
+All paths below are relative to `--data_dir`.
 
-- [Silhouette Score Plot](#silhouette-score-plot-and-cluster-visualization-in-2d-space)
-- [Clustering Quality Metrics Plots](#clustering-quality-metrics-plots)
-- [Cluster Visualization in 2D Space](#cluster-visualization-in-2d-space)
-- [Series Plots Grouped by Cluster](#series-plots-grouped-by-cluster)<br>
+| File | Format | Size |
+| --- | --- | --- |
+| `queries.json` | `{"query": [...], "id": [...]}` | 639 queries |
+| `passages.json` | `{"passage": [...], "id": [...]}` | 918 passages |
+| `inv_qrels.json` | `{"passage_id": [...], "queries_ids": [[...], ...]}` | 96 passages with queries |
+| `passages_splits2.json` | `{"train": [passage_id, ...], "test": [...]}` | 61 / 35 |
+| `hard_negatives/ds_h2.json` | JSON Lines: `anchor`, `positive`, `negative_1`, `negative_2` | 415 rows |
 
-#### Silhouette Score Plot and Cluster Visualization in 2D Space
+Every query has exactly one relevant passage. Evaluation uses only the queries whose passage
+falls into the `test` split.
 
-left plot: for each cluster, silhouette coefficient values for all points in the cluster; points are arranged along the vertical axis, the right edge of each bar shows the silhouette coefficient value for that point. The dashed line shows the mean silhouette coefficient across all points.<br>
-right plot: points in 2D space colored according to their cluster.<br>
-dashed line: is the mean silhouette coefficient value (over all points)<br>
+## Layout
 
-<p align="center">
-<img src="resources/plot_silhouette.jpg">
-</p>
+```
+hybrid_retrieval/       shared code
+  data.py               CLI arguments and data loading
+  training.py           the training loop
+  config.py             layered merging of training configs
+  util/                 io, memory estimates, loss introspection
+  eval.py               weighted RRF evaluator for dense + sparse fusion (used from notebooks)
+  sampler.py            NoDuplicates variant that allows colliding negatives (experimental)
 
-
-#### Clustering Quality Metrics Plots
-Plots of clustering quality metric values (silhouette score, Calinski-Harabasz score, Davies-Bouldin score) as a function of the number of clusters for a given frequency:
-<br><br>
-<p align="center">
-<img src="resources/cluster_count_metrics.jpg">
-</p>
-
-
-#### Cluster Visualization in 2D Space
-Visualization of clusters in 2D space for a specific frequency and clustering:
-<br>
-<p align="center">
-<img src="resources/cluster_scatter.gif">
-</p>
-
-
-#### Series Plots Grouped by Cluster
-Plots of series grouped by cluster (columns), for a given clustering (number of clusters), model, frequency, and period:
-<br>
-<p align="center">
-<img src="resources/clusters.jpg">
-</p>
+train_retriever_dense.py
+train_retriever_splade.py
+train_reranker.py
+mine_hard_negatives.py
+```

@@ -1,5 +1,5 @@
 """
-#### model params estimation ####
+--- model params estimation -------------------------------------------
 Считает только статическую часть — то, что лежит в памяти постоянно.
 Активации сюда не входят: они зависят от длины батча, а не от модели.
 
@@ -19,14 +19,13 @@ training_footprint:
 format_report - training_footprint в виде строки
 
 
-#### GPU info ####
+--- GPU info -------------------------------------------
 cuda_report: срез памяти по всем GPU в виде строки: total/free, allocated, reseved, peak и т.д. (см. DeviceMemory)
 gpu_memory_html: срез памяти по всем GPU в виде html
 print_gpu_memory: срез памяти по всем GPU в виде html или если произошла ошибка то в виде строки 
 """
 
 from __future__ import annotations
-from IPython.display import display, HTML
 
 from collections import defaultdict
 from dataclasses import dataclass, field

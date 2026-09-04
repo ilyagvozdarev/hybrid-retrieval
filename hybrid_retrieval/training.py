@@ -1,15 +1,12 @@
-"""Запуск обучения: всё, что одинаково для dense / splade / реранкера."""
-
 from pathlib import Path
 from datetime import datetime
 
 import torch
-from sentence_transformers.base.sampler import BatchSamplers
 
-from ir_pipeline.util.io import write_json
-from ir_pipeline.util.param_estimate_meminfo import format_report, stats_from_model
-from ir_pipeline.util.loss_inspect import describe_loss
-from ir_pipeline.util.collect import collect
+from hybrid_retrieval.util.io import write_json
+from hybrid_retrieval.util.param_estimate_meminfo import format_report, stats_from_model
+from hybrid_retrieval.util.loss_inspect import describe_loss
+from hybrid_retrieval.util.collect import collect
 
 
 def device():
@@ -32,31 +29,32 @@ def make_run_name(model):
     return f"{model_name.split('/')[-1]}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
 
-def make_training_args(train_config, training_args_cls, output_dir, run_name,
-                       metric_for_best_model, batch_sampler):
-    """train_config уже слит из дефолтов скрипта и yaml; fp16/bf16 добавляются по железу."""
+def make_training_args(train_config, training_args_cls, output_dir, run_name, extra):
+    """
+    train_config уже слит из дефолтов скрипта и yaml; fp16/bf16 добавляются по железу.
+    extra — поля TrainingArguments от конкретного скрипта, перекрывают общие.
+    """
     is_bf16 = torch.cuda.is_bf16_supported(including_emulation=False)
     train_config["optim"] = {
         "fp16": not is_bf16,
         "bf16": is_bf16,
-        **train_config["optim"],       # явное значение из конфига важнее автоопределения
+        **train_config["optim"],
     }
 
-    return training_args_cls(
+    kwargs = dict(
         output_dir=output_dir,
         **train_config["training"],
         **train_config["optim"],
-        batch_sampler=batch_sampler,
         eval_strategy="steps",
         eval_steps=0.05,
         save_strategy="best",
         save_total_limit=1,
         load_best_model_at_end=True,
-        metric_for_best_model=metric_for_best_model,
         logging_steps=0.05,
         run_name=run_name,
         seed=train_config["seed"],
     )
+    return training_args_cls(**{**kwargs, **extra})
 
 
 def run_training(
@@ -66,10 +64,9 @@ def run_training(
     evaluator,
     train_dataset,
     train_config,
-    metric_for_best_model,
     trainer_cls,
     training_args_cls,
-    batch_sampler=BatchSamplers.NO_DUPLICATES,
+    training_args_kwargs,
     callbacks=(),
     out_dir="result",
 ):
@@ -83,8 +80,7 @@ def run_training(
         training_args_cls=training_args_cls,
         output_dir=output_dir,
         run_name=run_name,
-        metric_for_best_model=metric_for_best_model,
-        batch_sampler=batch_sampler,
+        extra=training_args_kwargs,
     )
 
     trainer = trainer_cls(
@@ -97,7 +93,7 @@ def run_training(
     )
 
     write_json(
-        dict(**train_config, loss=describe_loss(loss), batch_sampler=batch_sampler.value),
+        dict(**train_config, loss=describe_loss(loss), batch_sampler=targs.batch_sampler.value),
         output_dir / "settings.json",
     )
 

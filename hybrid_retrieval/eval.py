@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class WeightedReciprocalRankFusionEvaluator(ReciprocalRankFusionEvaluator):
-    """RRF(d) = w_dense / (k + rank_dense(d)) + w_sparse / (k + rank_sparse(d))
+    """
+    RRF(d) = w_dense / (k + rank_dense(d)) + w_sparse / (k + rank_sparse(d))
 
     Копия __call__ родителя, изменён только блок расчёта rrf_scores.
     """

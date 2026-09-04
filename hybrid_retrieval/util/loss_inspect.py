@@ -1,4 +1,4 @@
-import inspect, json, torch
+import inspect, torch
 
 _SCALAR = (int, float, bool, str, type(None))
 

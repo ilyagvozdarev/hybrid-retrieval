@@ -1,8 +1,10 @@
 import gc
 import torch
 
+
 def collect():
-    torch.cuda.ipc_collect()
     gc.collect()
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize()    
+    if torch.cuda.is_available():
+        torch.cuda.ipc_collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()

@@ -1,29 +1,28 @@
-"""Разбор CLI-аргументов и чтение данных, общие для всех скриптов обучения."""
-
 from pathlib import Path
 import argparse
 
 from datasets import load_dataset
 
-from ir_pipeline.util.io import read_json, read_config
+from hybrid_retrieval.util.io import read_json, read_config
 
 
+# ruff: noqa: C408
 ARGS_DEFAULT = dict(
-    train_config="configs/train/train_config.yaml",
-    data_dir="../data/dataset",
-    inv_qrels="inv_qrels.json",
-    passages_splits="passages_splits2.json",
-    passages="passages.json",
-    queries="queries.json",
-    train_dataset="hard_negatives/ds_h2.json",
-    out_dir="result",
+    train_config =    dict(default="configs/train/train_config.yaml"), 
+    data_dir =        dict(default="./data/dataset", help="relative path for the other data files"),
+    inv_qrels =       dict(default="inv_qrels.json", help="inverted qrels: passage id → queries ids"),
+    passages_splits = dict(default="passages_splits2.json", help="dict split (train/test) → queries of split"),
+    passages =        dict(default="passages.json", help="passages texts and ids (column format)"),
+    queries =         dict(default="queries.json", help="queries texts and ids (column format)"),
+    train_dataset =   dict(default="hard_negatives/ds_h2.json", help="training dataset in n-tuple format"),
+    out_dir =         dict(default="result"),
 )
 
 
 def parse_args(args_default):
     parser = argparse.ArgumentParser()
-    for name, default in args_default.items():
-        parser.add_argument(f"--{name}", type=type(default), default=default)
+    for name, v in args_default.items():
+        parser.add_argument(f"--{name}", **{"type": type(v["default"]), **v})
     return parser.parse_args()
 
 

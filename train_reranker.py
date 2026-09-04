@@ -1,3 +1,22 @@
+'''
+Running the Script:
+
+```bash
+python train_reranker.py \
+--model "BAAI/bge-reranker-v2-m3" \
+--train_config "configs/train/train_config.yaml" \
+--data_dir "./data/dataset" \
+--inv_qrels "inv_qrels.json" \
+--passages_splits "passages_splits2.json" \
+--passages "passages.json" \
+--queries "queries.json" \
+--train_dataset "hard_negatives/ds_h2.json" \
+--out_dir "result" \
+--ranking "result/eval/dense/Information-Retrieval_evaluation_ir_evaluator_predictions_cosine.jsonl" \
+--ranking_top_k 20
+```
+'''
+
 from sentence_transformers import CrossEncoder
 from sentence_transformers.cross_encoder.trainer import CrossEncoderTrainer
 from sentence_transformers.cross_encoder.training_args import CrossEncoderTrainingArguments
@@ -5,15 +24,16 @@ from sentence_transformers.cross_encoder.evaluation import CrossEncoderReranking
 from sentence_transformers.base.sampler import BatchSamplers
 from datasets import load_dataset, Dataset
 
-from ir_pipeline import data, training
-from ir_pipeline.config import merge_configs
+from hybrid_retrieval import data, training
+from hybrid_retrieval.config import merge_configs
 
 
 ARGS_DEFAULT = dict(
     **data.ARGS_DEFAULT,
-    model="BAAI/bge-reranker-v2-m3",
-    ranking="result/eval/dense/Information-Retrieval_evaluation_ir_evaluator_predictions_cosine.jsonl",
-    ranking_top_k=20,
+    model =         dict(default="BAAI/bge-reranker-v2-m3"),
+    ranking =       dict(default="result/eval/dense/Information-Retrieval_evaluation_ir_evaluator_predictions_cosine.jsonl", 
+                         help="retriever corpus ranking"),
+    ranking_top_k = dict(default=20, help="top-k for reranking")
 )
 
 TRAIN_CONFIG_DEFAULT = dict(
@@ -97,11 +117,13 @@ def train_setup_1():
         evaluator=evaluator,
         train_dataset=args["train_dataset"],
         train_config=train_config,
-        # у cross-encoder'а нет similarity_fn: метрики вида {name}_{metric}
-        metric_for_best_model=f"{EVALUATOR_NAME}_ndcg@{AT_K}",
         trainer_cls=CrossEncoderTrainer,
         training_args_cls=CrossEncoderTrainingArguments,
-        batch_sampler=BatchSamplers.NO_DUPLICATES,
+        training_args_kwargs=dict(
+            # у cross-encoder'а нет similarity_fn: метрики вида {name}_{metric}
+            metric_for_best_model=f"{EVALUATOR_NAME}_ndcg@{AT_K}",
+            batch_sampler=BatchSamplers.NO_DUPLICATES,
+        ),
         out_dir=args["out_dir"],
     )
 
@@ -129,9 +151,12 @@ def train_setup_2():
         evaluator=evaluator,
         train_dataset=args["train_dataset"],
         train_config=train_config,
-        metric_for_best_model=f"{EVALUATOR_NAME}_ndcg@{AT_K}",
         trainer_cls=CrossEncoderTrainer,
         training_args_cls=CrossEncoderTrainingArguments,
+        training_args_kwargs=dict(
+            metric_for_best_model=f"{EVALUATOR_NAME}_ndcg@{AT_K}",
+            batch_sampler=BatchSamplers.BATCH_SAMPLER,
+        ),
         out_dir=args["out_dir"],
     )
 

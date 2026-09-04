@@ -1,3 +1,20 @@
+'''
+Running the Script:
+
+```bash
+python train_retriever_splade.py \
+--model "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1" \
+--train_config "configs/train/train_config.yaml" \
+--data_dir "./data/dataset" \
+--inv_qrels "inv_qrels.json" \
+--passages_splits "passages_splits2.json" \
+--passages "passages.json" \
+--queries "queries.json" \
+--train_dataset "hard_negatives/ds_h2.json" \
+--out_dir "result"
+```
+'''
+
 from sentence_transformers import (
     SparseEncoder,
     SparseEncoderTrainer,
@@ -9,13 +26,13 @@ from sentence_transformers.sparse_encoder.modules import SpladePooling, MLMTrans
 from sentence_transformers.sparse_encoder.callbacks import SpladeRegularizerWeightSchedulerCallback
 from sentence_transformers.base.sampler import BatchSamplers
 
-from ir_pipeline import data, training
-from ir_pipeline.config import merge_configs
+from hybrid_retrieval import data, training
+from hybrid_retrieval.config import merge_configs
 
 
 ARGS_DEFAULT = dict(
     **data.ARGS_DEFAULT,
-    model="opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1",
+    model = dict(default="opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1")
 )
 
 TRAIN_CONFIG_DEFAULT = dict(
@@ -80,11 +97,12 @@ def main():
         evaluator=evaluator,
         train_dataset=args["train_dataset"],
         train_config=merge_configs(TRAIN_CONFIG_DEFAULT, args["train_config"]),
-        # evaluator даёт метрики вида {name}_{similarity_fn_name}_{metric}
-        metric_for_best_model=f"{EVALUATOR_NAME}_dot_ndcg@10",
         trainer_cls=SparseEncoderTrainer,
         training_args_cls=SparseEncoderTrainingArguments,
-        batch_sampler=BatchSamplers.NO_DUPLICATES,
+        training_args_kwargs=dict(
+            metric_for_best_model=f"{EVALUATOR_NAME}_dot_ndcg@10",
+            batch_sampler=BatchSamplers.NO_DUPLICATES,
+        ),
         callbacks=[SpladeRegularizerWeightSchedulerCallback(loss=loss, warmup_ratio=1 / 3)],
         out_dir=args["out_dir"],
     )

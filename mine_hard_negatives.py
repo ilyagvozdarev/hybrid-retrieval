@@ -6,7 +6,7 @@ from datasets import Dataset
 from sentence_transformers import SentenceTransformer
 import sentence_transformers.util as st
 
-from ir_pipeline.util.io import read_config, read_json
+from hybrid_retrieval.util.io import read_config, read_json
 
 logging.basicConfig(format="%(asctime)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -41,7 +41,7 @@ def mine_bm25(corpus, queries_text, passage_to_id, mine_config):
     import string
     import numpy as np
     from rank_bm25 import BM25Okapi
-    from ir_pipeline.util.stop_words import remove_stop_words
+    from hybrid_retrieval.util.stop_words import remove_stop_words
 
     def bm25_process(text):
         tokenized_doc = [token.strip(string.punctuation) for token in text.lower().split()]

@@ -1,7 +1,8 @@
 
 <!--- BADGES: START --->
 
-[![HF Models](https://huggingface.co/i1j)
+[![HF Models](https://img.shields.io/badge/%F0%9F%A4%97-models-yellow)](https://huggingface.co/i1j)
+
 <!--- BADGES: END --->
 
 ## Hybrid retrieval

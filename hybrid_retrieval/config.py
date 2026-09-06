@@ -32,7 +32,7 @@ def deep_update(base, overrides):
 
 
 def merge_configs(*configs):
-    # конфиги накладываются слева направо: последний имеет наивысший приоритет
+    # configs are applied left to right: the last one has the highest priority
     result = {}
     for config in configs:
         if config:

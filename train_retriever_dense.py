@@ -1,6 +1,4 @@
 '''
-Running the Script:
-
 ```bash
 python train_retriever_dense.py \
 --model "deepvk/USER-bge-m3" \

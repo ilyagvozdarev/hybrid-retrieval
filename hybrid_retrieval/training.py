@@ -31,8 +31,9 @@ def make_run_name(model):
 
 def make_training_args(train_config, training_args_cls, output_dir, run_name, extra):
     """
-    train_config уже слит из дефолтов скрипта и yaml; fp16/bf16 добавляются по железу.
-    extra — поля TrainingArguments от конкретного скрипта, перекрывают общие.
+    train_config has already been merged from the script defaults and the yaml;
+    fp16/bf16 are added according to the hardware.
+    extra — TrainingArguments fields specific to a given script; they override the common ones.
     """
     is_bf16 = torch.cuda.is_bf16_supported(including_emulation=False)
     train_config["optim"] = {

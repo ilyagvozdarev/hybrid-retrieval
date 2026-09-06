@@ -250,9 +250,9 @@ def eval_pipeline(model_ce, dense_pred, qrels_eval, passages,
                   top_k_retrieval=30, ks=(1, 3, 5, 10), mrr_at_k=10,
                   map_at_k=100, batch_size=64, show_progress_bar=False):
     """
-    End-to-end оценка: top-N ретривера -> реранкинг кросс-энкодером -> top-k
+    End-to-end evaluation: top-N retriever -> cross-encoder reranking -> top-k
 
-    Метрики считаются по формулам InformationRetrievalEvaluator, поэтому результат напрямую сопоставим.
+    Metrics are calculated using the InformationRetrievalEvaluator formulas, so the results are directly comparable.
     """
     all_pairs = []
     meta = []  # (cand_ids, gold) либо None, если кандидатов нет
@@ -261,7 +261,7 @@ def eval_pipeline(model_ce, dense_pred, qrels_eval, passages,
         gold = qrels_eval[sample["query_id"]]
         gold = set(gold) if isinstance(gold, (list, set, tuple)) else {gold}
         if not gold:
-            continue  # IR-эвалуатор исключает такие запросы из усреднения
+            continue  # IR evaluator excludes such queries from averaging.
 
         cand_ids = [d["corpus_id"] for d in sample["results"]][:top_k_retrieval]
         if not cand_ids:
@@ -292,7 +292,7 @@ def eval_pipeline(model_ce, dense_pred, qrels_eval, passages,
         scores = all_scores[offset:offset + len(cand_ids)]
         offset += len(cand_ids)
 
-        # ties разрываются по возрастанию corpus_id — как в IR-эвалуаторе
+        # ties are broken in ascending order of corpus_id - as in the IR evaluator
         order = sorted(range(len(cand_ids)),
                        key=lambda i: (-float(scores[i]), cand_ids[i]))
         rel = [1 if cand_ids[i] in gold else 0 for i in order]

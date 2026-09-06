@@ -1,6 +1,4 @@
 '''
-Running the Script:
-
 ```bash
 python train_retriever_splade.py \
 --model "opensearch-project/opensearch-neural-sparse-encoding-multilingual-v1" \

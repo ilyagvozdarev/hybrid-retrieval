@@ -1,44 +1,50 @@
-
 """
-Негативы в MNRL попадают только в docs_all, то есть всегда в столбцы матриц похожести. Строками везде выступают либо local_queries, 
-либо local_docs = docs[0] — то есть одни позитивы. Ни в одном из четырёх directions негатив не является объектом, которому приписана 
-метка. Отсюда: два одинаковых негатива не могут породить ложную метку — это структурно невозможно, а не «обычно безопасно».
+Motivation:
 
-Единственный реальный эффект — такой негатив дважды попадает в знаменатель softmax и получает вдвое больший вес в градиенте. 
-При hardness_mode штраф ему тоже начисляется дважды. Это лёгкое перевзвешивание конкретного негатива, а не порча разметки. 
-Так что да, коллизия безопасна.
+In MNRL negatives only ever end up in docs_all, i.e. always in the columns of the similarity
+matrices; the rows in all four directions are either queries or docs[0] — anchors and positives.
+A negative never carries a label, so two identical negatives belonging to different queries
+cannot corrupt one. Every other collision is forbidden:
 
-Ваше правило даже строже, чем нужно. Раз негативы никогда не строки, безопасна не только пара негатив-негатив, но и якорь-негатив. 
-Опасны ровно три случая: anchor==anchor, positive==positive, positive==negative. Я оставил проверку якоря против негативов (запрос 
-и пассаж совпадают исчезающе редко, так что она ничего не стоит), но при желании её тоже можно снять.
+    positive == positive, positive == negative  — a query's positive becomes its negative
+    anchor   == anchor    — the positive of one anchor becomes a negative of that same anchor
+    anchor   == positive  — in q→d the anchor becomes a negative of itself, in d→q it also
+                            produces a wrong label
+    anchor   == negative  — in q→d the anchor becomes a negative of itself, in d→q nothing
+                            wrong happens
 
-Корень проблемы может быть не там. У mine_hard_negatives дефолт output_format="triplet" — значит одна пара (anchor, positive) превращается в 
-num_negatives отдельных строк. При num_negatives=3 у вас 1917 строк, где каждый якорь и каждый позитив встречаются трижды. 
-Эти дубликаты NoDuplicatesBatchSampler откладывает всегда, и ваша поблажка на них не распространяется — она лечит только совпадение 
-негативов у разных запросов.
+Meanwhile, negatives shared between queries are common for datasets with hard negatives mined
+from small corpora. The sampler does not discard conflicting rows, it defers them to later
+batches (sampler.py:588), and __len__ is honestly documented as an upper bound. No data is lost,
+but the tail batches degenerate into small ones, and for MNRL the batch size is the number of
+negatives. That is where the relaxation pays off: fewer deferrals, fuller batches.
 
-совпадения негативов между запросами часты для датасетов с намайнеными hard-негативами из маленьких корпусов 
+The only side effect is that such a negative enters the softmax denominator twice and gets twice
+the weight in the gradient. Under hardness_mode its penalty is counted twice as well. That is a
+mild re-weighting of one particular negative rather than a wrong label, which is why the
+collision is safe.
 
-Ради чего всё это. Сэмплер конфликтные строки не выбрасывает, а откладывает в следующие батчи (sampler.py:588), и __len__ честно назван оценкой сверху. 
-Данные не теряются, но хвостовые батчи вырождаются в мелкие, а для MNRL размер батча — это буквально количество негативов. В этом и выигрыш от 
-послабления: меньше откладываний, полнее батчи.
 
-Почему нельзя обойтись маленьким переопределением:
-get_sample_values возвращает плоский set значений всех столбцов, а _has_overlap — обычный isdisjoint. Принадлежность столбцу теряется до 
-всякой проверки. И выразить это через один set нельзя в принципе: негатив должен конфликтовать с позитивом того же текста, но не конфликтовать 
-с негативом того же текста — асимметричное отношение, а членство в множестве симметрично. Нужны два множества, а значит __iter__ придётся 
-переписать (~50 строк, логика отложенного связного списка сохранена дословно).
+Implementation details:
 
-Два ограничения, которые я заложил осознанно: precompute_hashes=True запрещён явной ошибкой (в hash-пути столбцы схлопнуты в плоский массив, 
-восстановить принадлежность нельзя), а негативные столбцы определяются по префиксу negative — под triplet и n-tuple подходит, для своих имён 
-есть параметр negative_columns.
+Why a small override will not do: get_sample_values returns a flat set of the values of all
+columns, and _has_overlap is a plain isdisjoint. Column membership is lost before any check takes
+place. And it cannot be expressed with a single set in principle: a negative must conflict with a
+positive holding the same text, yet must not conflict with a negative holding that same text —
+an asymmetric relation, whereas set membership is symmetric. Two sets are required, which means
+__iter__ has to be rewritten (~50 lines, with the deferred linked-list logic preserved verbatim).
+
+Two deliberate limitations: precompute_hashes=True is rejected with an explicit error (the hash
+path collapses the columns into a flat array, so membership cannot be recovered), and negative
+columns are detected by the "negative" prefix, which covers the triplet and n-tuple formats; for
+custom names there is the negative_columns parameter.
 
 NoDuplicates    : [[2, 3, 4], [0], [1]]
 ExceptNegatives : [[2, 3, 4], [0, 1]]
-rows 0+1 together: True     <- общий негатив, разрешено
-rows 0+2 together: False    <- общий якорь
-rows 0+3 together: False    <- общий позитив
-rows 0+4 together: False    <- позитив одного == негатив другого
+rows 0+1 together: True     <- shared negative, allowed
+rows 0+2 together: False    <- shared anchor
+rows 0+3 together: False    <- shared positive
+rows 0+4 together: False    <- positive of one == negative of the other
 """
 
 from collections.abc import Iterator
@@ -57,11 +63,6 @@ class NoDuplicatesExceptNegativesBatchSampler(NoDuplicatesBatchSampler):
     """
     Like NoDuplicatesBatchSampler, but two rows may share a batch when their only
     common value sits in a negative column.
-
-    In MultipleNegativesRankingLoss negatives only ever occupy columns of the
-    similarity matrices, never rows, so a repeated negative cannot produce a wrong
-    label: it just appears twice in the softmax denominator. Anchor/anchor,
-    positive/positive and positive/negative collisions still split the rows apart.
     """
 
     def __init__(self, *args, negative_columns: list[str] | None = None, **kwargs) -> None:

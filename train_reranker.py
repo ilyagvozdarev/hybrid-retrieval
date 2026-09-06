@@ -1,6 +1,4 @@
 '''
-Running the Script:
-
 ```bash
 python train_reranker.py \
 --model "BAAI/bge-reranker-v2-m3" \
@@ -141,7 +139,6 @@ def train_setup_2():
         samples=args["ranking"],
         at_k=AT_K,
         name=EVALUATOR_NAME,
-        # при обучении добавляем позитивы, чтобы оценивать только реранкер для выбора чекпоинта
         always_rerank_positives=True,
     )
 

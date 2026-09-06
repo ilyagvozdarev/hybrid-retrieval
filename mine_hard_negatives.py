@@ -1,3 +1,18 @@
+'''
+```bash
+python mine_hard_negatives.py \
+--model "deepvk/USER-bge-m3" \
+--mine_config "configs/mine_config.yaml" \
+--out_file "output.json" \
+--qrels "qrels.json" \
+--passages "passages.json" \
+--queries "queries.json" \
+--cache_embeddings "cache_embeddings" \
+--batch_size 64 \
+--seed 42
+```
+'''
+
 import argparse, random, logging
 from pathlib import Path
 
@@ -26,14 +41,15 @@ MINE_CONFIG_DEFAULT = dict(
 )
 
 ARGS_DEFAULT = dict(
-    mine_config="configs/mine_config.yaml",
-    out_file="output.json",
-    qrels='qrels.json',
-    passages='passages.json',
-    queries='queries.json',
-    cache_embeddings="cache_embeddings",
-    batch_size=64,
-    seed=42
+    model              = dict(default="deepvk/USER-bge-m3"),
+    mine_config        = dict(default="configs/mine_config.yaml"),
+    out_file           = dict(default="output.json"),
+    qrels              = dict(default="qrels.json"),
+    passages           = dict(default="passages.json"),
+    queries            = dict(default="queries.json"),
+    cache_embeddings   = dict(default="cache_embeddings"),
+    batch_size         = dict(default=64),
+    seed               = dict(default=42)
 )
 
 
@@ -215,21 +231,14 @@ def read_data(args):
     return args
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(args_default):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str)
-    parser.add_argument("--mine_config", type=str, default=ARGS_DEFAULT["mine_config"])
-    parser.add_argument("--qrels", type=str, default=ARGS_DEFAULT["qrels"])
-    parser.add_argument("--passages", type=str, default=ARGS_DEFAULT["passages"])
-    parser.add_argument("--queries", type=str, default=ARGS_DEFAULT["queries"])
-    parser.add_argument("--out_file", type=str, default=ARGS_DEFAULT["out_file"])
-    parser.add_argument("--cache_embeddings", type=str, default=ARGS_DEFAULT["cache_embeddings"])
-    parser.add_argument("--batch_size", type=int, default=ARGS_DEFAULT["batch_size"])
-    parser.add_argument("--seed", type=int, default=ARGS_DEFAULT["seed"])
-    return parser.parse_args()    
+    for name, v in args_default.items():
+        parser.add_argument(f"--{name}", **{"type": type(v["default"]), **v})
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
-    args = parse_args()
+    args = parse_args(ARGS_DEFAULT)
     args = read_data(args)
     mine_hard_negatives(**args)

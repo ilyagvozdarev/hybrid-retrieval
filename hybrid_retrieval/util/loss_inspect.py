@@ -2,7 +2,14 @@ import inspect, torch
 
 _SCALAR = (int, float, bool, str, type(None))
 
-def describe_loss(obj):
+def describe(obj):
+    """
+    дампер конфигурации для модулей PyTorch / sentence-transformers: рекурсивно собирает 
+    в dict описание объекта — класс + гиперпараметры, с которыми он был создан.
+
+    применимость:
+    логирование эксперимента (W&B / MLflow)
+    """
     cfg = {"class": type(obj).__name__}
 
     # 1) штатный API sentence-transformers
@@ -12,7 +19,7 @@ def describe_loss(obj):
         except Exception:
             pass
 
-    # 2) добираем то, чего в нём нет, + разворачиваем вложенные лоссы
+    # 2) добираем то, чего в нём нет + разворачиваем вложенные
     for cls in type(obj).__mro__:
         init = cls.__dict__.get("__init__")
         if init is None:
@@ -24,11 +31,11 @@ def describe_loss(obj):
                 continue
             val = getattr(obj, name)
             if isinstance(val, torch.nn.Module):
-                cfg[name] = describe_loss(val)          # перекрывает строку из get_config_dict
+                cfg[name] = describe(val)          # перекрывает строку из get_config_dict
             elif name in cfg:
                 continue
             elif isinstance(val, _SCALAR):
                 cfg[name] = val
-            elif callable(val):
+            elif callable(val):                    # (так вытаскиваются функции активации, similarity_fct и т.п.)
                 cfg[name] = getattr(val, "__name__", repr(val))
     return cfg

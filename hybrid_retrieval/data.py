@@ -14,7 +14,7 @@ ARGS_DEFAULT = dict(
     passages_splits = dict(default="passages_splits2.json", help="dict split (train/test) → queries of split"),
     passages =        dict(default="passages.json", help="passages texts and ids (column format)"),
     queries =         dict(default="queries.json", help="queries texts and ids (column format)"),
-    train_dataset =   dict(default="hard_negatives/ds_h2.json", help="training dataset in n-tuple format"),
+    train_dataset   = dict(default="hard_negatives/ds_h2.json", help="training dataset in n-tuple format"),
     out_dir =         dict(default="result"),
 )
 
@@ -28,15 +28,15 @@ def parse_args(args_default):
 
 def read_data(args):
     """
-    читает конфиг обучения и данные, указанные в args (dict или Namespace).
+    reads the training config and the data specified in args (a dict or a Namespace).
 
-    Пути к данным берутся относительно data_dir, путь к train_config — относительно cwd.
-    Возвращает копию args, в которой появились:
-        train_config    dict из yaml/json
-        train_dataset   datasets.Dataset для обучения
-        passages        {passage_id: текст} — весь корпус
-        queries_eval    {query_id: текст} — только тестовый сплит
-        qrels_eval      {query_id: [passage_id]} — только тестовый сплит
+    Data paths are resolved relative to data_dir, the train_config path relative to cwd.
+    Returns a copy of args with the following added:
+        train_config    dict loaded from the yaml/json
+        train_dataset   datasets.Dataset used for training
+        passages        {passage_id: text} — the whole corpus
+        queries_eval    {query_id: text} — the test split only
+        qrels_eval      {query_id: [passage_id]} — the test split only
     """
     args = dict(vars(args) if isinstance(args, argparse.Namespace) else args)
     data_dir = Path(args["data_dir"])
@@ -51,7 +51,7 @@ def read_data(args):
     queries = {id: q for q, id in zip(queries["query"], queries["id"])}
     passages = {id: p for p, id in zip(passages["passage"], passages["id"])}
 
-    # у каждого запроса только 1 релевантный пассаж
+    # each query has only 1 relevant passage
     qrels_eval = {
         qid: [pid]
         for pid, qids in zip(*inv_qrels.values())

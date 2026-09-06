@@ -1,5 +1,10 @@
-## Hybrid retrieval
 
+<!--- BADGES: START --->
+
+[![HF Models](https://huggingface.co/i1j)
+<!--- BADGES: END --->
+
+## Hybrid retrieval
 Training and evaluation of a two-stage retrieval pipeline: retriever top-n candidates → cross-encoder reranker reordering.
 
 **approaches**:
